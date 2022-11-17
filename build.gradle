@@ -9,11 +9,11 @@ plugins {
     id 'idea'
     id 'maven-publish'
     // Checks for unnecessary dependencies
-    id 'com.autonomousapps.dependency-analysis' version "1.13.1"
+    id 'com.autonomousapps.dependency-analysis' version "1.14.1"
     // helps resolve log implementation clashes
     id 'dev.jacomet.logging-capabilities' version "0.10.0"
     // This plugin helps resolve jakarta/javax dev.jacomet.logging-capabilities
-    id 'de.jjohannes.java-ecosystem-capabilities' version "0.6"
+    id 'de.jjohannes.java-ecosystem-capabilities' version "0.8"
 }
 
 // Mostly java, so default to this for now
