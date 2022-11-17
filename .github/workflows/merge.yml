@@ -12,7 +12,7 @@ jobs:
   build:
     if: startsWith(github.repository,'odpi/')
     runs-on: ubuntu-latest
-    
+
     name: "Merge"
     steps:
       - uses: actions/checkout@v3

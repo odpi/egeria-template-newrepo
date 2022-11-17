@@ -17,7 +17,6 @@ if (System.getenv("CI")) {
 repositories {
     mavenCentral()
     maven { url("https://oss.sonatype.org/content/repositories/snapshots") }
-    mavenLocal() // note - this may pick up modified classes from ~/.m2
 }
 
 // ensures we pick up the very latest snapshots when built
@@ -26,35 +25,39 @@ configurations.all {
     resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
 }
 
-// TODO: Specify group, name, description, version of new code being built
+// TODO: Specify group, description, version of new code being built. The name is in settings.gradle
 group = 'org.odpi.egeria'
 version = '1.0-SNAPSHOT'
-ext.name = 'New Egeria code'
 description = 'New code for Egeria'
 
 // TODO: Specify Dependency versions as variables
 ext {
-    egeriaversion = '3.6'
+    egeriaVersion = '3.13'
     slf4jVersion = '1.7.36'
-    jacksonVersion = '2.13.2'
-    jupiterVersion = '5.8.2'
-    httpclientVersion = '4.5.13'
+    jacksonVersion = '2.14.0'
+    jupiterVersion = '5.9.1'
 }
 
 // For a single module, add here. For multiple modules, refactor and use constraints (see main egeria build.gradle for an example)
-// TODO: Update dependencies for this module
+// A simpler example can also be found in egeria-database-connectors
+// TODO: Update dependencies as needed for this module
 dependencies {
 
-    // Only used for build - already present in server chassis at runtime - similar to 'provided' with maven
-    compileOnly "org.odpi.egeria:audit-log-framework:${egeriaversion}"
+    // This will set constraints so that dependencies here follow egeria versions
+    platform "org.odpi.egeria:egeria:${egeriaVersion}"
 
-    // Needed for build and run
-    implementation "org.slf4j:slf4j-api:${slf4jVersion}"
+    // Only used for build - already present in server chassis at runtime - similar to 'provided' with maven
+    compileOnly "org.odpi.egeria:audit-log-framework:${egeriaVersion}"
+
+    // Needed for build and run - also found in the platform
+    compileOnly "org.slf4j:slf4j-api:${slf4jVersion}"
 
     // Only needed to compile test code
     testCompileOnly "org.junit.jupiter:junit-jupiter-api:${jupiterVersion}"
-    testImplementation "org.odpi.egeria:topic-integrator-api:${egeriaversion}"
+    testImplementation "org.odpi.egeria:topic-integrator-api:${egeriaVersion}"
     testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${jupiterVersion}"
+    testImplementation "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
+    testImplementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
 
 }
 
@@ -87,7 +90,7 @@ tasks.withType(JavaCompile) {
     sourceCompatibility = "11"
     targetCompatibility = "11"
     options.incremental = true
-    options.fork = true
+    options.fork = false
     options.failOnError = true
     options.compilerArgs << '-Xlint:unchecked' << '-Xlint:deprecation'
 }
@@ -99,7 +102,8 @@ javadoc {
     }
 }
 
-// We will typically build an uber jar with dependencies. Can change name here.
+// Can remove the shadowJar definitions if a jar with dependencies is not needed
+// compileonly content won't be included, so even an uber jar should not contain egeria dependencies already in chassis.
 shadowJar {
     archiveClassifier = 'jar-with-dependencies'
 }
@@ -142,9 +146,8 @@ publishing {
                     url = 'http://github.com/odpi/egeria-template-newrepo/'
                 }
             }
-            // Override the project name & description for the pom based on properties set in the child build.gradle (hard to default & required for maven central)
+            // The maven artifact name comes from settings.gradle, if not found there defaults to directory name
             pom.withXml {
-                asNode().appendNode('name', "${project.ext.name}")
                 asNode().appendNode('description', "${project.description}")
             }
         }
