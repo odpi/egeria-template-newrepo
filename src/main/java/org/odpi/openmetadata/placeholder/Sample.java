@@ -4,7 +4,7 @@
 package org.odpi.openmetadata.placeholder;
 
 /**
- * Sample has no implementation
+ * TODO: Sample has no implementation - you need to replace this code
  */
 public class Sample {
 }

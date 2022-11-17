@@ -8,7 +8,21 @@ plugins {
     id "com.github.johnrengelman.shadow" version "7.1.2"
     id 'idea'
     id 'maven-publish'
+    // Checks for unnecessary dependencies
+    id 'com.autonomousapps.dependency-analysis' version "1.13.1"
+    // helps resolve log implementation clashes
+    id 'dev.jacomet.logging-capabilities' version "0.10.0"
+    // This plugin helps resolve jakarta/javax dev.jacomet.logging-capabilities
+    id 'de.jjohannes.java-ecosystem-capabilities' version "0.6"
 }
+
+// Mostly java, so default to this for now
+apply plugin: 'java'
+apply plugin: 'jacoco'
+apply plugin: 'de.jjohannes.java-ecosystem-capabilities'
+apply plugin: 'dev.jacomet.logging-capabilities'
+// As we've migrated from maven - we'll assume all submodules publish directly to maven
+apply plugin: 'maven-publish'
 
 if (System.getenv("CI")) {
     apply plugin: 'signing'
@@ -17,7 +31,6 @@ if (System.getenv("CI")) {
 repositories {
     mavenCentral()
     maven { url("https://oss.sonatype.org/content/repositories/snapshots") }
-    mavenLocal() // note - this may pick up modified classes from ~/.m2
 }
 
 // ensures we pick up the very latest snapshots when built
@@ -26,49 +39,57 @@ configurations.all {
     resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
 }
 
-// TODO: Specify group, name, description, version of new code being built
+// TODO: Specify group, description, version of new code being built. The name is in settings.gradle
 group = 'org.odpi.egeria'
 version = '1.0-SNAPSHOT'
-ext.name = 'New Egeria code'
 description = 'New code for Egeria'
 
 // TODO: Specify Dependency versions as variables
 ext {
-    egeriaversion = '3.6'
+    egeriaVersion = '3.13'
     slf4jVersion = '1.7.36'
-    jacksonVersion = '2.13.2'
-    jupiterVersion = '5.8.2'
-    httpclientVersion = '4.5.13'
+    jacksonVersion = '2.14.0'
+    jupiterVersion = '5.9.1'
 }
 
 // For a single module, add here. For multiple modules, refactor and use constraints (see main egeria build.gradle for an example)
-// TODO: Update dependencies for this module
+// A simpler example can also be found in egeria-database-connectors
+// TODO: Update dependencies as needed for this module
 dependencies {
 
-    // Only used for build - already present in server chassis at runtime - similar to 'provided' with maven
-    compileOnly "org.odpi.egeria:audit-log-framework:${egeriaversion}"
+    // This will set constraints so that dependencies here follow egeria versions
+    platform "org.odpi.egeria:egeria:${egeriaVersion}"
 
-    // Needed for build and run
-    implementation "org.slf4j:slf4j-api:${slf4jVersion}"
+    // Only used for build - already present in server chassis at runtime - similar to 'provided' with maven
+    compileOnly "org.odpi.egeria:audit-log-framework:${egeriaVersion}"
+
+    // Needed for build and run - also found in the platform
+    compileOnly "org.slf4j:slf4j-api:${slf4jVersion}"
 
     // Only needed to compile test code
-    testCompileOnly "org.junit.jupiter:junit-jupiter-api:${jupiterVersion}"
-    testImplementation "org.odpi.egeria:topic-integrator-api:${egeriaversion}"
-    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${jupiterVersion}"
+    //testImplementation "org.odpi.egeria:topic-integrator-api:${egeriaVersion}"
+    testImplementation "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
+    //testImplementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${jupiterVersion}"
 
 }
 
 
+// Testing
 test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        includeEngines 'junit-jupiter'
+    }
+    dependencies {
+        testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${jupiterVersion}"
+    }
+
     testLogging {
         events "passed", "skipped", "failed"
     }
+
     reports {
         html.required = true
-    }
-    filter {
-        includeTestsMatching "*Test"
     }
 }
 
@@ -87,7 +108,7 @@ tasks.withType(JavaCompile) {
     sourceCompatibility = "11"
     targetCompatibility = "11"
     options.incremental = true
-    options.fork = true
+    options.fork = false
     options.failOnError = true
     options.compilerArgs << '-Xlint:unchecked' << '-Xlint:deprecation'
 }
@@ -99,7 +120,13 @@ javadoc {
     }
 }
 
-// We will typically build an uber jar with dependencies. Can change name here.
+// code coverage
+jacoco {
+    toolVersion = "0.8.8"
+}
+
+// Can remove the shadowJar definitions if a jar with dependencies is not needed
+// compileonly content won't be included, so even an uber jar should not contain egeria dependencies already in chassis.
 shadowJar {
     archiveClassifier = 'jar-with-dependencies'
 }
@@ -142,9 +169,8 @@ publishing {
                     url = 'http://github.com/odpi/egeria-template-newrepo/'
                 }
             }
-            // Override the project name & description for the pom based on properties set in the child build.gradle (hard to default & required for maven central)
+            // The maven artifact name comes from settings.gradle, if not found there defaults to directory name
             pom.withXml {
-                asNode().appendNode('name', "${project.ext.name}")
                 asNode().appendNode('description', "${project.description}")
             }
         }
@@ -184,3 +210,71 @@ if (System.getenv("CI")) {
         useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
     }
 }
+
+/*
+ * Additional useful tasks
+ */
+task printAllDependencies(type: DependencyReportTask) {}
+task printSubDependencies(type: DependencyReportTask) {}
+task findDependency(type: DependencyInsightReportTask) {}
+
+
+
+/*
+ * Configuration for sub projects only
+ */
+subprojects {
+    // All tasks currently will run under allProjects - which includes root.
+}
+
+
+/*
+ * Additional aggregate tasks run only at parent
+ */
+
+// Jacoco reporting -- from gradle docs
+task codeCoverageReport(type: JacocoReport) {
+    // Gather execution data from all subprojects
+    executionData fileTree(project.rootDir.absolutePath).include("**/build/jacoco/*.exec")
+
+    // Add all relevant sourcesets from the subprojects
+    subprojects.each {
+        sourceSets it.sourceSets.main
+    }
+
+    // enable the different report types (html, xml, csv)
+    reports {
+        // xml is usually used to integrate code coverage with
+        // other tools like SonarQube, Coveralls or Codecov
+        xml.required = true
+
+        // HTML reports can be used to see code coverage
+        // without any external tools
+        html.required = true
+        csv.required = true
+    }
+
+}
+// always run the tests before generating the report
+codeCoverageReport.dependsOn {
+    subprojects*.test
+}
+
+// Dependency checking - see https://github.com/autonomousapps/dependency-analysis-android-gradle-plugin
+dependencyAnalysis {
+    issues {
+        all {
+            onAny {
+                severity('fail')
+            }
+            onUnusedDependencies {
+                exclude("junit:junit", "org.junit.jupiter:junit-jupiter-api", "org.junit.jupiter:junit-jupiter-engine", "com.fasterxml.jackson.core:jackson-annotations")
+            }
+        }
+    }
+}
+
+// Always run dependency check for every regular build
+build.dependsOn("buildHealth")
+
+
