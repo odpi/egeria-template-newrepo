@@ -8,7 +8,21 @@ plugins {
     id "com.github.johnrengelman.shadow" version "7.1.2"
     id 'idea'
     id 'maven-publish'
+    // Checks for unnecessary dependencies
+    id 'com.autonomousapps.dependency-analysis' version "1.13.1"
+    // helps resolve log implementation clashes
+    id 'dev.jacomet.logging-capabilities' version "0.10.0"
+    // This plugin helps resolve jakarta/javax dev.jacomet.logging-capabilities
+    id 'de.jjohannes.java-ecosystem-capabilities' version "0.6"
 }
+
+// Mostly java, so default to this for now
+apply plugin: 'java'
+apply plugin: 'jacoco'
+apply plugin: 'de.jjohannes.java-ecosystem-capabilities'
+apply plugin: 'dev.jacomet.logging-capabilities'
+// As we've migrated from maven - we'll assume all submodules publish directly to maven
+apply plugin: 'maven-publish'
 
 if (System.getenv("CI")) {
     apply plugin: 'signing'
@@ -53,25 +67,29 @@ dependencies {
     compileOnly "org.slf4j:slf4j-api:${slf4jVersion}"
 
     // Only needed to compile test code
-    testCompileOnly "org.junit.jupiter:junit-jupiter-api:${jupiterVersion}"
-    testImplementation "org.odpi.egeria:topic-integrator-api:${egeriaVersion}"
-    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${jupiterVersion}"
+    //testImplementation "org.odpi.egeria:topic-integrator-api:${egeriaVersion}"
     testImplementation "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
-    testImplementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    //testImplementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${jupiterVersion}"
 
 }
 
 
+// Testing
 test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        includeEngines 'junit-jupiter'
+    }
+    dependencies {
+        testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${jupiterVersion}"
+    }
+
     testLogging {
         events "passed", "skipped", "failed"
     }
+
     reports {
         html.required = true
-    }
-    filter {
-        includeTestsMatching "*Test"
     }
 }
 
@@ -100,6 +118,11 @@ javadoc {
     if (JavaVersion.current().isJava9Compatible()) {
         options.addBooleanOption('html5', true)
     }
+}
+
+// code coverage
+jacoco {
+    toolVersion = "0.8.8"
 }
 
 // Can remove the shadowJar definitions if a jar with dependencies is not needed
@@ -187,3 +210,71 @@ if (System.getenv("CI")) {
         useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
     }
 }
+
+/*
+ * Additional useful tasks
+ */
+task printAllDependencies(type: DependencyReportTask) {}
+task printSubDependencies(type: DependencyReportTask) {}
+task findDependency(type: DependencyInsightReportTask) {}
+
+
+
+/*
+ * Configuration for sub projects only
+ */
+subprojects {
+    // All tasks currently will run under allProjects - which includes root.
+}
+
+
+/*
+ * Additional aggregate tasks run only at parent
+ */
+
+// Jacoco reporting -- from gradle docs
+task codeCoverageReport(type: JacocoReport) {
+    // Gather execution data from all subprojects
+    executionData fileTree(project.rootDir.absolutePath).include("**/build/jacoco/*.exec")
+
+    // Add all relevant sourcesets from the subprojects
+    subprojects.each {
+        sourceSets it.sourceSets.main
+    }
+
+    // enable the different report types (html, xml, csv)
+    reports {
+        // xml is usually used to integrate code coverage with
+        // other tools like SonarQube, Coveralls or Codecov
+        xml.required = true
+
+        // HTML reports can be used to see code coverage
+        // without any external tools
+        html.required = true
+        csv.required = true
+    }
+
+}
+// always run the tests before generating the report
+codeCoverageReport.dependsOn {
+    subprojects*.test
+}
+
+// Dependency checking - see https://github.com/autonomousapps/dependency-analysis-android-gradle-plugin
+dependencyAnalysis {
+    issues {
+        all {
+            onAny {
+                severity('fail')
+            }
+            onUnusedDependencies {
+                exclude("junit:junit", "org.junit.jupiter:junit-jupiter-api", "org.junit.jupiter:junit-jupiter-engine", "com.fasterxml.jackson.core:jackson-annotations")
+            }
+        }
+    }
+}
+
+// Always run dependency check for every regular build
+build.dependsOn("buildHealth")
+
+
