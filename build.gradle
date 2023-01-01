@@ -47,9 +47,9 @@ description = 'New code for Egeria'
 // TODO: Specify Dependency versions as variables
 ext {
     egeriaVersion = '3.15'
-    slf4jVersion = '1.7.36'
     jacksonVersion = '2.14.2'
     jupiterVersion = '5.9.2'
+    slf4jVersion = '2.0.6'
 }
 
 // For a single module, add here. For multiple modules, refactor and use constraints (see main egeria build.gradle for an example)
