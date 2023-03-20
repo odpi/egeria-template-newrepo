@@ -23,6 +23,7 @@ apply plugin: 'de.jjohannes.java-ecosystem-capabilities'
 apply plugin: 'dev.jacomet.logging-capabilities'
 // As we've migrated from maven - we'll assume all submodules publish directly to maven
 apply plugin: 'maven-publish'
+apply plugin: 'checkstyle'
 
 if (System.getenv("CI")) {
     apply plugin: 'signing'
@@ -129,6 +130,12 @@ jacoco {
 // compileonly content won't be included, so even an uber jar should not contain egeria dependencies already in chassis.
 shadowJar {
     archiveClassifier = 'jar-with-dependencies'
+}
+
+// Checking of javaheaders for license & copyright
+checkstyle {
+    toolVersion = '10.7.0'
+    showViolations = true
 }
 
 // We want to built a jar with dependencies in a normal build, so to avoid specifying task explicitly
