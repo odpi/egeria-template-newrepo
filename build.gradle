@@ -5,21 +5,24 @@
 
 plugins {
     id 'java-library'
-    id "com.github.johnrengelman.shadow" version "7.1.2"
+    id "com.github.johnrengelman.shadow" version "8.1.0"
     id 'idea'
     id 'maven-publish'
     // Checks for unnecessary dependencies
-    id 'com.autonomousapps.dependency-analysis' version "1.14.1"
+    id 'com.autonomousapps.dependency-analysis' version "1.19.0"
     // helps resolve log implementation clashes
-    id 'dev.jacomet.logging-capabilities' version "0.10.0"
+    id 'dev.jacomet.logging-capabilities' version "0.11.0"
     // This plugin helps resolve jakarta/javax dev.jacomet.logging-capabilities
-    id 'de.jjohannes.java-ecosystem-capabilities' version "0.8"
+    id 'org.gradlex.java-ecosystem-capabilities' version "1.1"
+    // copyright checks
+    id 'checkstyle'
+
 }
 
 // Mostly java, so default to this for now
 apply plugin: 'java'
 apply plugin: 'jacoco'
-apply plugin: 'de.jjohannes.java-ecosystem-capabilities'
+apply plugin: 'org.gradlex.java-ecosystem-capabilities'
 apply plugin: 'dev.jacomet.logging-capabilities'
 // As we've migrated from maven - we'll assume all submodules publish directly to maven
 apply plugin: 'maven-publish'
@@ -46,31 +49,28 @@ description = 'New code for Egeria'
 
 // TODO: Specify Dependency versions as variables
 ext {
-    egeriaVersion = '3.13'
-    slf4jVersion = '1.7.36'
-    jacksonVersion = '2.14.0'
-    jupiterVersion = '5.9.1'
+    egeriaVersion = '4.0-SNAPSHOT'
 }
 
 // For a single module, add here. For multiple modules, refactor and use constraints (see main egeria build.gradle for an example)
-// A simpler example can also be found in egeria-database-connectors
-// TODO: Update dependencies as needed for this module
+
+
 dependencies {
 
     // This will set constraints so that dependencies here follow egeria versions
-    platform "org.odpi.egeria:egeria:${egeriaVersion}"
+    implementation platform("org.odpi.egeria:egeria:${egeriaVersion}")
 
+    // Many of these dependencies are in the platform already - in which case leave version empty
     // Only used for build - already present in server chassis at runtime - similar to 'provided' with maven
-    compileOnly "org.odpi.egeria:audit-log-framework:${egeriaVersion}"
+    compileOnly "org.odpi.egeria:audit-log-framework"
 
     // Needed for build and run - also found in the platform
-    compileOnly "org.slf4j:slf4j-api:${slf4jVersion}"
+    compileOnly "org.slf4j:slf4j-api"
 
     // Only needed to compile test code
-    //testImplementation "org.odpi.egeria:topic-integrator-api:${egeriaVersion}"
-    testImplementation "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
-    //testImplementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
-    testImplementation "org.junit.jupiter:junit-jupiter-api:${jupiterVersion}"
+    testImplementation "com.fasterxml.jackson.core:jackson-annotations"
+    testImplementation "org.junit.jupiter:junit-jupiter-api"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine"
 
 }
 
@@ -80,14 +80,9 @@ test {
     useJUnitPlatform {
         includeEngines 'junit-jupiter'
     }
-    dependencies {
-        testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${jupiterVersion}"
-    }
-
     testLogging {
         events "passed", "skipped", "failed"
     }
-
     reports {
         html.required = true
     }
@@ -96,8 +91,8 @@ test {
 
 // Maven Central (technically sonatype oss) requires we distribute source and javadoc.
 java {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
     withJavadocJar()
     withSourcesJar()
 }
@@ -105,8 +100,8 @@ java {
 // More Java language settings
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
-    sourceCompatibility = "11"
-    targetCompatibility = "11"
+    sourceCompatibility = "17"
+    targetCompatibility = "17"
     options.incremental = true
     options.fork = false
     options.failOnError = true
@@ -219,14 +214,12 @@ task printSubDependencies(type: DependencyReportTask) {}
 task findDependency(type: DependencyInsightReportTask) {}
 
 
-
 /*
  * Configuration for sub projects only
  */
 subprojects {
     // All tasks currently will run under allProjects - which includes root.
 }
-
 
 /*
  * Additional aggregate tasks run only at parent
@@ -272,6 +265,12 @@ dependencyAnalysis {
             }
         }
     }
+}
+
+// Checking of javaheaders for license & copyright
+checkstyle {
+    toolVersion = '10.7.0'
+    showViolations = true
 }
 
 // Always run dependency check for every regular build
